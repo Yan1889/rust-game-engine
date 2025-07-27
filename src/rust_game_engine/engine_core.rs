@@ -1,16 +1,21 @@
-use raylib::math::Vector2;
-use raylib::prelude::*;
 use std::collections::{HashMap, HashSet};
+use std::ops::Range;
 
-use crate::{BOUNCINESS, HEIGHT_F, WIDTH_F};
+use super::constants::*;
+use raylib::prelude::*;
+use raylib::prelude::MouseButton::MOUSE_BUTTON_LEFT;
 
 pub struct Scene {
+    pub rl: RaylibHandle,
+    pub rl_thread: RaylibThread,
     game_objects: Vec<GameObject>,
 }
 
 impl Scene {
-    pub fn new() -> Self {
+    pub fn new(rl: RaylibHandle, rl_thread: RaylibThread) -> Self {
         Self {
+            rl,
+            rl_thread,
             game_objects: vec![],
         }
     }
@@ -87,10 +92,17 @@ impl Scene {
         }
     }
 
-    pub fn render(&self, d: &mut RaylibDrawHandle) {
+    pub fn render(&mut self) {
+        let screen_width: i32 = self.rl.get_screen_width();
+        let screen_height: i32 = self.rl.get_screen_height();
+        let mut d = self.rl.begin_drawing(&self.rl_thread);
+
+        d.clear_background(Color::WHITESMOKE);
         for obj in &self.game_objects {
-            obj.render(d);
+            obj.render(&mut d);
         }
+
+        d.draw_fps(screen_width - 100, screen_height - 30);
     }
     pub fn add_game_object(&mut self, game_object: GameObject) {
         self.game_objects.push(game_object);
@@ -112,7 +124,7 @@ impl GameObject {
         Self {
             pos,
             vel: Vector2::new(0.0, 0.0),
-            accel: Vector2::new(0.0, 100.0),
+            accel: Vector2::new(0.0, GRAVITY),
             radius,
             mass,
         }
@@ -148,7 +160,7 @@ impl GameObject {
         other.vel = v2n_new + v2t_new;
 
         let dist: f32 = (other.pos - self.pos).length();
-        let buffer: f32 = 0.5;
+        let buffer: f32 = 0.;
         let overlap: f32 = self.radius + other.radius - dist + buffer;
 
         // bias
@@ -189,6 +201,21 @@ impl GameObject {
         d.draw_circle_v(&self.pos, self.radius, Color::BLACK);
     }
 }
+
+impl Scene {
+    pub fn mouse_pos(&self) -> Vector2 {
+        self.rl.get_mouse_position()
+    }
+
+    pub fn mouse_clicked(&self) -> bool {
+        self.rl.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+    }
+
+    pub fn get_random_value<T: From<i32>>(&self, num: Range<i32>) -> T {
+        self.rl.get_random_value(num)
+    }
+}
+
 fn clamp(value: &mut f32, min: f32, max: f32) {
     if *value < min {
         *value = min;
