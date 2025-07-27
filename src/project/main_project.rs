@@ -1,6 +1,7 @@
 use raylib::prelude::Vector2;
 use crate::rust_game_engine::constants::*;
 use crate::rust_game_engine::engine_core::*;
+use crate::rust_game_engine::physics::game_object::GameObject;
 
 pub fn setup(default_scene: &mut Scene) {
     println!("Hello world!");
