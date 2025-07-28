@@ -45,6 +45,7 @@ impl Scene {
         possible_collision_pairs
     }
 
+
     pub fn filter_real_collisions(
         &self,
         possible_collisions: &Vec<(usize, usize)>,
@@ -63,6 +64,15 @@ impl Scene {
         for &(i, j) in collisions {
             let (left, right) = self.game_objects.split_at_mut(j);
             left[i].resolve_collision_other(&mut right[0]);
+        }
+
+        let mut object_set: HashSet<usize> = HashSet::new();
+        for &(i, j) in collisions {
+            object_set.insert(i);
+            object_set.insert(j);
+        }
+        for i in object_set {
+            self.game_objects[i].resolve_collision_walls();
         }
     }
 }

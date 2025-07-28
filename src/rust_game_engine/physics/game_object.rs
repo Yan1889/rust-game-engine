@@ -1,6 +1,6 @@
-use raylib::prelude::*;
-use crate::rust_game_engine::engine_core::*;
 use crate::rust_game_engine::constants::*;
+use crate::rust_game_engine::engine_core::*;
+use raylib::prelude::*;
 
 pub struct GameObject {
     pub pos: Vector2,
@@ -16,18 +16,13 @@ impl GameObject {
         let radius: f32 = (mass / PI as f32).sqrt();
         Self {
             pos,
-            vel: Vector2::new(0.0, 0.0),
+            vel: Vector2::zero(),
             accel: Vector2::new(0.0, GRAVITY),
             radius,
             mass,
         }
     }
-    pub fn update_move(&mut self, delta_time: f32) {
-        self.vel += self.accel * delta_time;
-        self.pos += self.vel * delta_time;
 
-        self.resolve_collision_walls();
-    }
     pub fn resolve_collision_other(&mut self, other: &mut GameObject) {
         let u_normal: Vector2 = (other.pos - self.pos).normalized();
         let u_tangent: Vector2 = Vector2::new(-u_normal.y, u_normal.x);
@@ -53,12 +48,13 @@ impl GameObject {
         other.vel = v2n_new + v2t_new;
 
         let dist: f32 = (other.pos - self.pos).length();
-        let buffer: f32 = 0.;
+        let buffer: f32 = 0.0;
         let overlap: f32 = self.radius + other.radius - dist + buffer;
 
         // bias
-        let travel_dist_self: f32 = overlap * m1 / (m1 + m2);
-        let travel_dist_other: f32 = overlap * m2 / (m1 + m2);
+        let travel_percentage: f32 = 0.8;
+        let travel_dist_self: f32 = overlap * m1 / (m1 + m2) * travel_percentage;
+        let travel_dist_other: f32 = overlap * m2 / (m1 + m2) * travel_percentage;
 
         let dir_self_other: Vector2 = (self.pos - other.pos).normalized(); // some buffer space
 
@@ -89,6 +85,12 @@ impl GameObject {
         let dist_squared: f32 = (self.pos - other.pos).length_sqr();
         let radius_sum_squared: f32 = (self.radius + other.radius).powi(2);
         dist_squared < radius_sum_squared
+    }
+    pub fn update_move(&mut self, delta_time: f32) {
+        self.vel += self.accel * delta_time;
+        self.pos += self.vel * delta_time;
+
+        self.resolve_collision_walls();
     }
     pub fn render(&self, d: &mut RaylibDrawHandle) {
         d.draw_circle_v(&self.pos, self.radius, Color::BLACK);
