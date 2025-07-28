@@ -1,6 +1,4 @@
-use crate::rust_game_engine::constants::{HEIGHT_F, WIDTH_F};
 use crate::rust_game_engine::engine_core::Scene;
-use crate::rust_game_engine::physics::game_object::GameObject;
 use std::collections::{HashMap, HashSet};
 
 impl Scene {
@@ -9,24 +7,14 @@ impl Scene {
         let obj_count = self.game_objects.len();
 
         // spacial partitioning - grid
-        let cell_count_x: u32 = 10;
-        let cell_count_y: u32 = 10;
+        let cell_count_x: usize = 10;
+        let cell_count_y: usize = 10;
 
         let mut cell_index_map: HashMap<(usize, usize), Vec<usize>> = HashMap::new();
         // fill map
         for i in 0..obj_count {
-            let obj: &GameObject = &self.game_objects[i];
-
-            let mut cells_put_into: HashSet<(usize, usize)> = HashSet::new();
-            let offsets: [(f32, f32); 4] = [(-1., -1.), (-1., 1.), (1., -1.), (1., 1.)];
-            for (dx, dy) in offsets {
-                let x: f32 = obj.pos.x + obj.radius * dx;
-                let y: f32 = obj.pos.y + obj.radius * dy;
-                let cell_coord_x: usize = (x / WIDTH_F * cell_count_x as f32) as usize;
-                let cell_coord_y: usize = (y / HEIGHT_F * cell_count_y as f32) as usize;
-                cells_put_into.insert((cell_coord_x, cell_coord_y));
-            }
-
+            let cells_put_into: HashSet<(usize, usize)> =
+                self.game_objects[i].get_cell_positions(cell_count_x, cell_count_y);
             for cell in cells_put_into {
                 cell_index_map.entry(cell).or_insert(Vec::new()).push(i);
             }
@@ -44,7 +32,6 @@ impl Scene {
         }
         possible_collision_pairs
     }
-
 
     pub fn filter_real_collisions(
         &self,

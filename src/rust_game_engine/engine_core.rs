@@ -1,12 +1,12 @@
 use std::ops::Range;
 
-use crate::rust_game_engine::physics::game_object::GameObject;
+use crate::rust_game_engine::physics::game_object::{GameObject, PhysicsObjectType};
 use raylib::prelude::MouseButton::MOUSE_BUTTON_LEFT;
 use raylib::prelude::*;
 use crate::rust_game_engine::timer::Timer;
 
 pub struct Scene {
-    pub game_objects: Vec<GameObject>,
+    pub game_objects: Vec<PhysicsObjectType>,
     pub timers: Vec<Timer>,
 
     pub rl: RaylibHandle,
@@ -27,11 +27,12 @@ impl Scene {
         // timers
         let current_time: f32 = self.get_run_time();
 
-        let (timers_left, timers_done): (Vec<Timer>, Vec<Timer>) = self.timers.drain(..)
+        let (timers_left, timers_done): (Vec<Timer>, Vec<Timer>) = self.timers
+            .drain(..)
             .partition(|t| current_time < t.end_time);
 
         for t in timers_done {
-            (t.call_back)(self);
+            (t.callback)(self);
         }
         self.timers = timers_left;
 
@@ -42,21 +43,16 @@ impl Scene {
         }
 
         // resolve collisions until no objects are overlapping
-        let mut i: i32 = 0;
-        loop {
-            i += 1;
+        for i in 0..3 {
             let possible_collisions: Vec<(usize, usize)> = self.get_possible_collisions();
             let real_collisions: Vec<(usize, usize)> = self.filter_real_collisions(&possible_collisions);
             self.resolve_collisions(&real_collisions);
 
-            if true || real_collisions.is_empty() {
+            if real_collisions.is_empty() {
+                // no more work to do
                 break;
-            } else {
-                // println!("left: {}", real_collisions.len());
-                // self.render();
             }
         }
-        // println!("{}", i);
     }
 
     pub fn render(&mut self) {
@@ -71,7 +67,7 @@ impl Scene {
 
         d.draw_fps(screen_width - 100, screen_height - 30);
     }
-    pub fn add_game_object(&mut self, game_object: GameObject) {
+    pub fn add_game_object(&mut self, game_object: PhysicsObjectType) {
         self.game_objects.push(game_object);
     }
 
