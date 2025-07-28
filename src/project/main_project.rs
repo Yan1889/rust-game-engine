@@ -17,9 +17,9 @@ pub fn frame(scene: &mut Scene, delta_time: f32) {
 
 /// This is a functions provided as a demonstration how to use this engine
 fn spawn_random_ball(scene: &mut Scene) {
-    let pos_x: f32 = 50.; // scene.get_random_value::<i32>(0..WIDTH) as f32;
-    let pos_y: f32 = 50.; // scene.get_random_value::<i32>(0..(HEIGHT_F * 0.1) as i32) as f32;
-    let mass: f32 = 50.; // scene.get_random_value::<i32>(1..1000) as f32;
+    let pos_x: f32 = 50.;
+    let pos_y: f32 = 50.;
+    let mass: f32 = 50.;
     let vel: Vector2 = Vector2::new(1000., 0.);
 
     let mut obj: PhysicsObjectType = PhysicsObjectType::new_ball(Vector2::new(pos_x, pos_y), mass);
@@ -30,9 +30,9 @@ fn spawn_random_ball(scene: &mut Scene) {
 
 /// This is a functions provided as a demonstration how to use this engine
 fn spawn_one_timer(scene: &mut Scene) {
-    let new_timer: Timer = Timer::after_seconds(scene, 0.05, |scene_arg| {
+    let new_timer: Timer = Timer::after_seconds(scene, 0.05, |scene_arg: &mut Scene| {
         spawn_random_ball(scene_arg);
     });
     scene.timers.push(new_timer);
-    // println!("successfully added timer!");
+    println!("successfully added timer!");
 }
