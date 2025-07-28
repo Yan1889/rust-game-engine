@@ -1,15 +1,15 @@
-use std::collections::HashSet;
 use crate::rust_game_engine::constants::*;
 use crate::rust_game_engine::engine_core::*;
 use raylib::prelude::*;
+use std::collections::HashSet;
 
 pub enum PhysicsObjectType {
-    BALL{
+    BALL {
         obj: GameObject,
         physics: PhysicsAddition,
         radius: f32,
     },
-    SQUARE{
+    SQUARE {
         obj: GameObject,
         physics: PhysicsAddition,
         side_length: f32,
@@ -28,10 +28,8 @@ impl PhysicsObjectType {
     pub fn new_ball(pos: Vector2, mass: f32) -> PhysicsObjectType {
         let radius: f32 = (mass / PI as f32).sqrt();
         PhysicsObjectType::BALL {
-            obj: GameObject {
-                pos,
-            },
-            physics : PhysicsAddition{
+            obj: GameObject { pos },
+            physics: PhysicsAddition {
                 vel: Vector2::zero(),
                 accel: Vector2::new(0.0, GRAVITY),
                 mass,
@@ -40,34 +38,33 @@ impl PhysicsObjectType {
         }
     }
 
-
     pub fn new_square(pos: Vector2, mass: f32) -> PhysicsObjectType {
         let side_length: f32 = mass.sqrt();
         PhysicsObjectType::SQUARE {
-            obj: GameObject {
-                pos,
-            },
-            physics : PhysicsAddition{
+            obj: GameObject { pos },
+            physics: PhysicsAddition {
                 vel: Vector2::zero(),
                 accel: Vector2::new(0.0, GRAVITY),
                 mass,
             },
-            side_length
+            side_length,
         }
     }
 
     pub fn resolve_collision_other(&mut self, other: &mut PhysicsObjectType) {
         match (self, other) {
-            (PhysicsObjectType::BALL {
-                obj: self_obj,
-                physics: self_physics,
-                radius: self_radius,
-            },
-            PhysicsObjectType::BALL {
-                obj: other_obj,
-                physics: other_physics,
-                radius: other_radius,
-            }) => {
+            (
+                PhysicsObjectType::BALL {
+                    obj: self_obj,
+                    physics: self_physics,
+                    radius: self_radius,
+                },
+                PhysicsObjectType::BALL {
+                    obj: other_obj,
+                    physics: other_physics,
+                    radius: other_radius,
+                },
+            ) => {
                 let u_normal: Vector2 = (other_obj.pos - self_obj.pos).normalized();
                 let u_tangent: Vector2 = Vector2::new(-u_normal.y, u_normal.x);
 
@@ -116,10 +113,9 @@ impl PhysicsObjectType {
         }
     }
 
-
     pub fn resolve_collision_walls(&mut self) {
         match self {
-            PhysicsObjectType::BALL{
+            PhysicsObjectType::BALL {
                 obj,
                 physics,
                 radius,
@@ -138,7 +134,6 @@ impl PhysicsObjectType {
                 if upper_y < 0. || down_y > HEIGHT_F {
                     physics.vel.y *= -BOUNCINESS;
                 }
-
             }
             _ => {
                 todo!()
@@ -148,19 +143,36 @@ impl PhysicsObjectType {
 
     pub fn collides_with(&self, other: &PhysicsObjectType) -> bool {
         match (self, other) {
-            (PhysicsObjectType::BALL{
-                obj: self_obj,
-                radius: self_radius,
-                ..
-            },
-                PhysicsObjectType::BALL{
+            (
+                PhysicsObjectType::BALL {
+                    obj: self_obj,
+                    radius: self_radius,
+                    ..
+                },
+                PhysicsObjectType::BALL {
                     obj: other_obj,
                     radius: other_radius,
                     ..
-                }) => {
+                },
+            ) => {
                 let dist_squared: f32 = (self_obj.pos - other_obj.pos).length_sqr();
                 let radius_sum_squared: f32 = (self_radius + other_radius).powi(2);
                 dist_squared < radius_sum_squared
+            }
+
+            (
+                PhysicsObjectType::SQUARE {
+                    obj: self_obj,
+                    side_length: self_side_length,
+                    ..
+                },
+                PhysicsObjectType::SQUARE {
+                    obj: other_obj,
+                    side_length: other_side_length,
+                    ..
+                },
+            ) => {
+                todo!();
             }
 
             _ => {
@@ -169,26 +181,37 @@ impl PhysicsObjectType {
         }
     }
 
-    pub fn get_cell_positions(&self, cell_count_x: usize, cell_count_y: usize) -> HashSet<(usize, usize)> {
-        match self {
-            PhysicsObjectType::BALL{obj, radius, ..} => {
-                let mut cells_put_into: HashSet<(usize, usize)> = HashSet::new();
+    pub fn get_cell_positions(
+        &self,
+        cell_count_x: usize,
+        cell_count_y: usize,
+    ) -> HashSet<(usize, usize)> {
+        let mut cells_put_into: HashSet<(usize, usize)> = HashSet::new();
+        let offsets: [(f32, f32); 4] = [(-1., -1.), (-1., 1.), (1., -1.), (1., 1.)];
 
-                let offsets: [(f32, f32); 4] = [(-1., -1.), (-1., 1.), (1., -1.), (1., 1.)];
+        match self {
+            PhysicsObjectType::BALL { obj, radius, .. } => {
                 for (dx, dy) in offsets {
-                    let x: f32 = obj.pos.x + radius * dx;
-                    let y: f32 = obj.pos.y + radius * dy;
+                    let x: f32 = obj.pos.x + dx * radius;
+                    let y: f32 = obj.pos.y + dy * radius;
                     let cell_coord_x: usize = (x / WIDTH_F * cell_count_x as f32) as usize;
                     let cell_coord_y: usize = (y / HEIGHT_F * cell_count_y as f32) as usize;
                     cells_put_into.insert((cell_coord_x, cell_coord_y));
                 }
-                cells_put_into
             }
-            _ => {
-                todo!()
+            PhysicsObjectType::SQUARE {
+                obj, side_length, ..
+            } => {
+                for (dx, dy) in offsets {
+                    let x: f32 = obj.pos.x + dx * side_length / 2.;
+                    let y: f32 = obj.pos.y + dy * side_length / 2.;
+                    let cell_coord_x: usize = (x / WIDTH_F * cell_count_x as f32) as usize;
+                    let cell_coord_y: usize = (y / HEIGHT_F * cell_count_y as f32) as usize;
+                    cells_put_into.insert((cell_coord_x, cell_coord_y));
+                }
             }
         }
-
+        cells_put_into
     }
 
     pub fn update_move(&mut self, delta_time: f32) {
@@ -202,37 +225,49 @@ impl PhysicsObjectType {
     }
     pub fn render(&self, d: &mut RaylibDrawHandle) {
         match self {
-            PhysicsObjectType::BALL{obj, physics, radius} => {
+            PhysicsObjectType::BALL {
+                obj,
+                physics,
+                radius,
+            } => {
                 d.draw_circle_v(obj.pos, *radius, Color::BLACK);
             }
-            PhysicsObjectType::SQUARE{obj, physics, side_length} => {
-                d.draw_rectangle_v(obj.pos, Vector2::new(*side_length, *side_length), Color::BLACK);
+            PhysicsObjectType::SQUARE {
+                obj,
+                physics,
+                side_length,
+            } => {
+                d.draw_rectangle_v(
+                    obj.pos,
+                    Vector2::new(*side_length, *side_length),
+                    Color::BLACK,
+                );
             }
         }
     }
 
     pub fn get_game_obj(&self) -> &GameObject {
         match self {
-            PhysicsObjectType::BALL{obj, ..} => obj,
-            PhysicsObjectType::SQUARE{obj, ..} => obj,
+            PhysicsObjectType::BALL { obj, .. } => obj,
+            PhysicsObjectType::SQUARE { obj, .. } => obj,
         }
     }
     pub fn get_game_obj_mut(&mut self) -> &mut GameObject {
         match self {
-            PhysicsObjectType::BALL{obj, ..} => obj,
-            PhysicsObjectType::SQUARE{obj, ..} => obj,
+            PhysicsObjectType::BALL { obj, .. } => obj,
+            PhysicsObjectType::SQUARE { obj, .. } => obj,
         }
     }
     pub fn get_physics_obj(&self) -> &PhysicsAddition {
         match self {
-            PhysicsObjectType::BALL{physics, ..} => physics,
-            PhysicsObjectType::SQUARE {physics, ..} => physics,
+            PhysicsObjectType::BALL { physics, .. } => physics,
+            PhysicsObjectType::SQUARE { physics, .. } => physics,
         }
     }
     pub fn get_physics_obj_mut(&mut self) -> &mut PhysicsAddition {
         match self {
-            PhysicsObjectType::BALL{physics, ..} => physics,
-            PhysicsObjectType::SQUARE {physics, ..} => physics,
+            PhysicsObjectType::BALL { physics, .. } => physics,
+            PhysicsObjectType::SQUARE { physics, .. } => physics,
         }
     }
 }

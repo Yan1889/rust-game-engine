@@ -1,5 +1,6 @@
 use crate::rust_game_engine::engine_core::Scene;
 use std::collections::{HashMap, HashSet};
+use crate::rust_game_engine::physics::game_object::PhysicsObjectType;
 
 impl Scene {
     pub fn get_possible_collisions(&self) -> Vec<(usize, usize)> {
