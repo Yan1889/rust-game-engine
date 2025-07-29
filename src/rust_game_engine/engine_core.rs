@@ -1,13 +1,15 @@
+use std::collections::HashSet;
 use std::ops::Range;
 
-use crate::rust_game_engine::physics::game_object::{GameObject, PhysicsObjectType};
+use crate::rust_game_engine::physics::game_object::{PhysicsObject};
+use crate::rust_game_engine::timer::Timer;
 use raylib::prelude::MouseButton::MOUSE_BUTTON_LEFT;
 use raylib::prelude::*;
-use crate::rust_game_engine::timer::Timer;
 
 pub struct Scene {
-    pub game_objects: Vec<PhysicsObjectType>,
     pub timers: Vec<Timer>,
+    pub game_objects: Vec<PhysicsObject>,
+    pub space_partitioning_grid_size: (usize, usize),
 
     pub rl: RaylibHandle,
     pub rl_thread: RaylibThread,
@@ -16,8 +18,9 @@ pub struct Scene {
 impl Scene {
     pub fn new(rl: RaylibHandle, rl_thread: RaylibThread) -> Self {
         Self {
-            game_objects: vec![],
             timers: vec![],
+            game_objects: vec![],
+            space_partitioning_grid_size: (3, 3),
             rl,
             rl_thread,
         }
@@ -42,32 +45,73 @@ impl Scene {
             obj.update_move(delta_time);
         }
 
+        /*
         // resolve collisions until no objects are overlapping
-        for i in 0..3 {
+        for i in 0..30  {
             let possible_collisions: Vec<(usize, usize)> = self.get_possible_collisions();
             let real_collisions: Vec<(usize, usize)> = self.filter_real_collisions(&possible_collisions);
             self.resolve_collisions(&real_collisions);
+
+            println!("{}, {}", i, real_collisions.len());
 
             if real_collisions.is_empty() {
                 // no more work to do
                 break;
             }
         }
+         */
+        let possible_collisions: HashSet<(usize, usize)> = self.get_possible_collisions();
+        for &(i, j) in &possible_collisions {
+            self.game_objects[i].obj.color = Color::ORANGE;
+            self.game_objects[j].obj.color = Color::ORANGE;
+        }
+        let real_collisions = self.filter_real_collisions(possible_collisions);
+        for &(i, j) in &real_collisions {
+            self.game_objects[i].obj.color = Color::RED;
+            self.game_objects[j].obj.color = Color::RED;
+        }
     }
 
     pub fn render(&mut self) {
         let screen_width: i32 = self.rl.get_screen_width();
         let screen_height: i32 = self.rl.get_screen_height();
-        let mut d = self.rl.begin_drawing(&self.rl_thread);
+        let grid_dimensions: &(usize, usize) = &self.space_partitioning_grid_size;
 
+        let display_info: Vec<String> = self.get_display_info();
+
+        let mut d = self.rl.begin_drawing(&self.rl_thread);
         d.clear_background(Color::WHITESMOKE);
+
+        // display objects
         for obj in &self.game_objects {
             obj.render(&mut d);
         }
+        // display grid
+        for i in 0..grid_dimensions.0 {
+            let y: f32 = i as f32 / grid_dimensions.0 as f32 * screen_height as f32;
+            d.draw_line(0, y as i32, screen_width, y as i32, Color::RED);
+        }
+        for i in 0..grid_dimensions.1 {
+            let x: f32 = i as f32 / grid_dimensions.1 as f32 * screen_width as f32;
+            d.draw_line(x as i32, 0, x as i32, screen_height, Color::RED);
+        }
 
+        // display info text
+        for i in 0..display_info.len() {
+            let s: &str = &display_info[i];
+            d.draw_text(s, screen_width - 300, i as i32 * 40, 30, Color::DARKBLUE);
+        }
+        // display fps
         d.draw_fps(screen_width - 100, screen_height - 30);
     }
-    pub fn add_game_object(&mut self, game_object: PhysicsObjectType) {
+
+    pub fn get_display_info(&self) -> Vec<String> {
+        let mut result: Vec<String> = Vec::new();
+        result.push(format!("Object count: {}", self.game_objects.len()));
+        result.push(format!("Grid size: {:?}", self.space_partitioning_grid_size));
+        result
+    }
+    pub fn add_game_object(&mut self, game_object: PhysicsObject) {
         self.game_objects.push(game_object);
     }
 
@@ -90,11 +134,6 @@ impl Scene {
     }
 }
 
-pub fn clamp(value: &mut f32, min: f32, max: f32) {
-    if *value < min {
-        *value = min;
-    }
-    if *value > max {
-        *value = max;
-    }
+pub fn clamp(value: &mut f32, min: &f32, max: &f32) {
+    *value = value.min(*max).max(*min);
 }

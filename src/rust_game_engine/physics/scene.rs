@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use crate::rust_game_engine::physics::game_object::PhysicsObjectType;
 
 impl Scene {
-    pub fn get_possible_collisions(&self) -> Vec<(usize, usize)> {
+    pub fn get_possible_collisions(&self) -> HashSet<(usize, usize)> {
         // collision detection - broad phase
         let obj_count = self.game_objects.len();
 
@@ -21,13 +21,13 @@ impl Scene {
             }
         }
 
-        let mut possible_collision_pairs: Vec<(usize, usize)> = Vec::new();
+        let mut possible_collision_pairs: HashSet<(usize, usize)> = HashSet::new();
 
         for cell in cell_index_map {
             let obj_in_cell_count: usize = cell.1.len();
             for i in 0..obj_in_cell_count {
                 for j in (i + 1)..obj_in_cell_count {
-                    possible_collision_pairs.push((cell.1[i], cell.1[j]));
+                    possible_collision_pairs.insert((cell.1[i], cell.1[j]));
                 }
             }
         }
@@ -36,11 +36,11 @@ impl Scene {
 
     pub fn filter_real_collisions(
         &self,
-        possible_collisions: &Vec<(usize, usize)>,
+        possible_collisions: HashSet<(usize, usize)>,
     ) -> Vec<(usize, usize)> {
         // collision detection - narrow phase
         let mut real_collision_pairs: Vec<(usize, usize)> = Vec::new();
-        for &(i, j) in possible_collisions {
+        for (i, j) in possible_collisions {
             if self.game_objects[i].collides_with(&self.game_objects[j]) {
                 real_collision_pairs.push((i, j));
             }
