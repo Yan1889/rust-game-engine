@@ -1,6 +1,5 @@
 use crate::rust_game_engine::engine_core::Scene;
 use std::collections::{HashMap, HashSet};
-use crate::rust_game_engine::physics::game_object::PhysicsObjectType;
 
 impl Scene {
     pub fn get_possible_collisions(&self) -> HashSet<(usize, usize)> {
@@ -15,7 +14,7 @@ impl Scene {
         // fill map
         for i in 0..obj_count {
             let cells_put_into: HashSet<(usize, usize)> =
-                self.game_objects[i].get_cell_positions(cell_count_x, cell_count_y);
+                self.game_objects[i].get_cell_positions((cell_count_x, cell_count_y));
             for cell in cells_put_into {
                 cell_index_map.entry(cell).or_insert(Vec::new()).push(i);
             }

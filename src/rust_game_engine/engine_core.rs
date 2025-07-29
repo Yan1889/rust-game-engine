@@ -70,6 +70,7 @@ impl Scene {
             self.game_objects[i].obj.color = Color::RED;
             self.game_objects[j].obj.color = Color::RED;
         }
+        self.resolve_collisions(&real_collisions);
     }
 
     pub fn render(&mut self) {
