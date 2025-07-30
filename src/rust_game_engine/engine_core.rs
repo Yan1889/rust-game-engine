@@ -21,7 +21,7 @@ impl Scene {
         Self {
             timers: vec![],
             game_objects: vec![],
-            space_partitioning_grid_size: (1, 1),
+            space_partitioning_grid_size: (10, 10),
             rl,
             rl_thread,
         }

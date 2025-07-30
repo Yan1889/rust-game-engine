@@ -1,5 +1,6 @@
 use crate::rust_game_engine::constants::*;
-use crate::rust_game_engine::physics::game_object::PhysicsAddition::{Dynamic, Static};
+use crate::rust_game_engine::physics::physics_addition::PhysicsAddition::*;
+use crate::rust_game_engine::physics::physics_addition::*;
 use rand::prelude::*;
 use raylib::prelude::*;
 use std::collections::HashSet;
@@ -16,65 +17,6 @@ pub struct GameObject {
     pub color: Color,
     pub name_tag: String,
 }
-pub enum PhysicsAddition {
-    Dynamic {
-        accel: Vector2,
-        vel: Vector2,
-        corners: Vec<Vector2>,
-        mass: f32,
-    },
-    Static {
-        corners: Vec<Vector2>,
-    },
-}
-
-impl PhysicsAddition {
-    pub fn generate_regular_polygon(corner_count: usize, radius: f32) -> Vec<Vector2> {
-        let mut corners: Vec<Vector2> = Vec::new();
-        for i in 0..corner_count {
-            let angle: f32 = i as f32 / corner_count as f32 * TAU + 0.9 * PI;
-            let vector_relative: Vector2 = Vector2::new(0., 1.).scale_by(radius).rotated(angle);
-            corners.push(vector_relative);
-        }
-        corners
-    }
-
-    pub fn generate_polygon_line(start: Vector2, end: Vector2) -> Vec<Vector2> {
-        let u_normal: Vector2 = (end - start).normalized();
-        let u_tangent: Vector2 = Vector2::new(-u_normal.y, u_normal.x);
-
-        let thickness: f32 = 10.;
-        let mut corners: Vec<Vector2> = Vec::new();
-        corners.push(end - u_tangent * thickness);
-        corners.push(start - u_tangent * thickness);
-        corners.push(start + u_tangent * thickness);
-        corners.push(end + u_tangent * thickness);
-        corners
-    }
-    pub fn get_corners(&self) -> &Vec<Vector2> {
-        match self {
-            Dynamic { corners, .. } => corners,
-            Static { corners, .. } => corners,
-        }
-    }
-    pub fn get_corners_mut(&mut self) -> &mut Vec<Vector2> {
-        match self {
-            Dynamic {
-                ref mut corners, ..
-            } => corners,
-            Static {
-                ref mut corners, ..
-            } => corners,
-        }
-    }
-
-    pub fn get_mass(&self) -> f32 {
-        match self {
-            Dynamic { mass, .. } => *mass,
-            Static { .. } => f32::INFINITY,
-        }
-    }
-}
 
 impl PhysicsObject {
     pub fn new(pos: Vector2, mass: f32, name_tag: String) -> PhysicsObject {
@@ -88,12 +30,7 @@ impl PhysicsObject {
 
         // A ~ pi*r*r => r ~ sqrt(A / pi)
         let radius: f32 = (mass / PI).sqrt();
-        let mut corners: Vec<Vector2> =
-            PhysicsAddition::generate_regular_polygon(rng.random_range(3..=8), radius);
-
-        for c in &mut corners {
-            *c += pos;
-        }
+        let polygon: Polygon = Polygon::new_regular_polygon(pos, rng.random_range(3..=6), radius);
 
         PhysicsObject {
             obj: GameObject {
@@ -105,56 +42,23 @@ impl PhysicsObject {
             physics: Dynamic {
                 vel: Vector2::zero(),
                 accel: Vector2::new(0.0, GRAVITY),
-                corners,
-                mass,
-            },
-        }
-    }
-
-    pub fn new_line(start: Vector2, end: Vector2, name_tag: String) -> PhysicsObject {
-        let mut rng = rand::rng();
-        let color: Color = Color::new(
-            rng.random::<u8>(),
-            rng.random::<u8>(),
-            rng.random::<u8>(),
-            255,
-        );
-
-        let corners: Vec<Vector2> = PhysicsAddition::generate_polygon_line(start, end);
-        let radius: f32 = (end - start).length() / 2.;
-        let mass: f32 = PI * radius * radius;
-
-        PhysicsObject {
-            obj: GameObject {
-                pos: (end + start) / 2.,
-                color,
-                rotation: 0.,
-                name_tag,
-            },
-            physics: Dynamic {
-                vel: Vector2::zero(),
-                accel: Vector2::new(0.0, GRAVITY),
-                corners,
+                polygon,
                 mass,
             },
         }
     }
 
     pub fn generate_ground(pos: Vector2) -> PhysicsObject {
-        let mut corners: Vec<Vector2> = PhysicsAddition::generate_regular_polygon(5, 50.);
-
-        for c in &mut corners {
-            *c += pos;
-        }
+        let polygon: Polygon = Polygon::new_regular_polygon(pos, 5, 50.);
 
         PhysicsObject {
             obj: GameObject {
                 pos,
-                color: Color::BLACK,
+                color: Color::RED,
                 rotation: 0.,
                 name_tag: "ground_obj".to_string(),
             },
-            physics: Static { corners },
+            physics: Static { polygon },
         }
     }
 
@@ -168,17 +72,15 @@ impl PhysicsObject {
             (Vector2::new(WIDTH_F, 0.), Vector2::new(0., 0.)),
         ];
         for (start, end) in wall_points {
-            let corners: Vec<Vector2> = PhysicsAddition::generate_polygon_line(start, end);
+            let polygon: Polygon = Polygon::new_polygon_line(start, end, 1.);
             let obj: PhysicsObject = PhysicsObject {
                 obj: GameObject {
                     rotation: 0.,
-                    color: Color::BLACK,
+                    color: Color::RED,
                     pos: (start + end) / 2.,
                     name_tag: "wall".to_string(),
                 },
-                physics: Static {
-                    corners
-                },
+                physics: Static { polygon },
             };
             result.push(obj);
         }
@@ -225,7 +127,6 @@ impl PhysicsObject {
         self.move_relative(&correction_self);
         other.move_relative(&correction_other);
 
-
         // update velocity
         let u_tangent: Vector2 = Vector2::new(-best_u_axis.y, best_u_axis.x);
 
@@ -234,11 +135,19 @@ impl PhysicsObject {
         let mut v2n: f32 = 0.;
         let mut v2t: f32 = 0.;
 
-        if let Dynamic { vel: ref mut self_vel, .. } = self.physics {
+        if let Dynamic {
+            vel: ref mut self_vel,
+            ..
+        } = self.physics
+        {
             v1n = self_vel.dot(best_u_axis);
             v1t = self_vel.dot(u_tangent);
 
-            if let Dynamic { vel: ref mut other_vel, .. } = other.physics {
+            if let Dynamic {
+                vel: ref mut other_vel,
+                ..
+            } = other.physics
+            {
                 v2n = other_vel.dot(best_u_axis);
                 v2t = other_vel.dot(u_tangent);
 
@@ -269,7 +178,11 @@ impl PhysicsObject {
             }
         } else {
             // self: static, other: dynamic
-            if let Dynamic { vel: ref mut other_vel, .. } = other.physics {
+            if let Dynamic {
+                vel: ref mut other_vel,
+                ..
+            } = other.physics
+            {
                 v2n = other_vel.dot(best_u_axis);
                 v2t = other_vel.dot(u_tangent);
 
@@ -302,12 +215,12 @@ impl PhysicsObject {
             let mut other_min: f32 = f32::INFINITY;
             let mut other_max: f32 = f32::NEG_INFINITY;
 
-            for c in self.physics.get_corners() {
+            for c in &self.physics.get_polygon().corners {
                 let value: f32 = u_axis.dot(*c);
                 self_min = self_min.min(value);
                 self_max = self_max.max(value);
             }
-            for c in other.physics.get_corners() {
+            for c in &other.physics.get_polygon().corners {
                 let value: f32 = u_axis.dot(*c);
                 other_min = other_min.min(value);
                 other_max = other_max.max(value);
@@ -327,7 +240,7 @@ impl PhysicsObject {
     }
     pub fn get_all_u_axes(&self) -> Vec<Vector2> {
         let mut result: Vec<Vector2> = Vec::new();
-        let corners: &Vec<Vector2> = self.physics.get_corners();
+        let corners: &Vec<Vector2> = &self.physics.get_polygon().corners;
         for i in 0..corners.len() {
             let c1: Vector2 = corners[i];
             let c2: Vector2 = corners[(i + 1) % corners.len()];
@@ -342,14 +255,22 @@ impl PhysicsObject {
         &self,
         (cell_count_x, cell_count_y): (usize, usize),
     ) -> HashSet<(usize, usize)> {
-        let mut cells_put_into: HashSet<(usize, usize)> = HashSet::new();
-        for corner in self.physics.get_corners() {
-            let cell_coord_x: usize = (corner.x / (WIDTH_F + 0.1) * cell_count_x as f32) as usize;
-            let cell_coord_y: usize = (corner.y / (HEIGHT_F + 0.1) * cell_count_y as f32) as usize;
-            cells_put_into.insert((cell_coord_x, cell_coord_y));
-        }
+        let to_cell_coords = |x: f32, y: f32| -> (usize, usize) {
+            let x_new: usize = (x / WIDTH_F * cell_count_x as f32) as usize;
+            let y_new: usize = (y / HEIGHT_F * cell_count_y as f32) as usize;
+            (x_new, y_new)
+        };
+        let bb: Rectangle = self.physics.get_polygon().bounding_box;
+        let (start_x_cell, start_y_cell) = to_cell_coords(bb.x, bb.y);
+        let (end_x_cell, end_y_cell) = to_cell_coords(bb.x + bb.width, bb.y + bb.height);
 
-        cells_put_into
+        let mut result: HashSet<(usize, usize)> = HashSet::new();
+        for x in start_x_cell..=end_x_cell {
+            for y in start_y_cell..=end_y_cell {
+                result.insert((x, y));
+            }
+        }
+        result
     }
 
     pub fn update_move(&mut self, delta_time: f32) {
@@ -367,7 +288,7 @@ impl PhysicsObject {
                 self.obj.rotation += added_rotation;
 
                 // update corner rotation
-                for corner in self.physics.get_corners_mut() {
+                for corner in &mut self.physics.get_polygon_mut().corners {
                     let new_d_vector: Vector2 = (*corner - self.obj.pos).rotated(added_rotation);
                     *corner = self.obj.pos + new_d_vector;
                 }
@@ -380,16 +301,9 @@ impl PhysicsObject {
 
     pub fn move_relative(&mut self, added_pos: &Vector2) {
         self.obj.pos += *added_pos;
-        for corner in self.physics.get_corners_mut() {
-            *corner += *added_pos;
-        }
+        self.physics.get_polygon_mut().move_relative(added_pos);
     }
     pub fn render(&self, d: &mut RaylibDrawHandle) {
-        let corner_count: usize = self.physics.get_corners().len();
-        for i in 0..corner_count {
-            let first_corner: &Vector2 = &self.physics.get_corners()[i];
-            let second_corner: &Vector2 = &self.physics.get_corners()[(i + 1) % corner_count];
-            d.draw_line_ex(first_corner, second_corner, 5., self.obj.color);
-        }
+        self.physics.get_polygon().render(d, self.obj.color);
     }
 }
