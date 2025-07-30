@@ -1,10 +1,11 @@
 use std::collections::HashSet;
 use std::ops::Range;
-
+use raylib::ffi::KeyboardKey::KEY_LEFT;
 use crate::rust_game_engine::physics::game_object::{PhysicsObject};
 use crate::rust_game_engine::timer::Timer;
 use raylib::prelude::MouseButton::MOUSE_BUTTON_LEFT;
 use raylib::prelude::*;
+use raylib::prelude::KeyboardKey::{KEY_DOWN, KEY_RIGHT, KEY_UP};
 
 pub struct Scene {
     pub timers: Vec<Timer>,
@@ -45,22 +46,13 @@ impl Scene {
             obj.update_move(delta_time);
         }
 
-        /*
-        // resolve collisions until no objects are overlapping
-        for i in 0..30  {
-            let possible_collisions: Vec<(usize, usize)> = self.get_possible_collisions();
-            let real_collisions: Vec<(usize, usize)> = self.filter_real_collisions(&possible_collisions);
-            self.resolve_collisions(&real_collisions);
 
-            println!("{}, {}", i, real_collisions.len());
-
-            if real_collisions.is_empty() {
-                // no more work to do
-                break;
-            }
+        for obj in &mut self.game_objects {
+            obj.obj.color = Color::BLUE;
         }
-         */
+
         let possible_collisions: HashSet<(usize, usize)> = self.get_possible_collisions();
+
         for &(i, j) in &possible_collisions {
             self.game_objects[i].obj.color = Color::ORANGE;
             self.game_objects[j].obj.color = Color::ORANGE;
@@ -71,6 +63,12 @@ impl Scene {
             self.game_objects[j].obj.color = Color::RED;
         }
         self.resolve_collisions(&real_collisions);
+    }
+
+    // todo
+    // pub fn get_object_by_name_tag_mut(&mut self, name_tag: &str) -> Option<&mut PhysicsObject> {}
+    pub fn get_first_object_mut(&mut self) -> &mut PhysicsObject {
+        self.game_objects.first_mut().unwrap()
     }
 
     pub fn render(&mut self) {
@@ -118,6 +116,23 @@ impl Scene {
 
     pub fn mouse_pos(&self) -> Vector2 {
         self.rl.get_mouse_position()
+    }
+
+    pub fn get_key_direction(&self) -> Vector2 {
+        let mut result: Vector2 = Vector2::zero();
+        if self.rl.is_key_down(KEY_LEFT) {
+            result += Vector2::new(-1., 0.);
+        }
+        if self.rl.is_key_down(KEY_RIGHT) {
+            result += Vector2::new(1., 0.);
+        }
+        if self.rl.is_key_down(KEY_UP) {
+            result += Vector2::new(0., -1.);
+        }
+        if self.rl.is_key_down(KEY_DOWN) {
+            result += Vector2::new(0., 1.);
+        }
+        result
     }
 
     pub fn mouse_clicked(&self) -> bool {

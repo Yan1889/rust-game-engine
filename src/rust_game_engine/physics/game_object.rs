@@ -1,8 +1,9 @@
 use crate::rust_game_engine::constants::*;
+use crate::rust_game_engine::physics::game_object::PhysicsAddition::{Dynamic, Static};
 use rand::prelude::*;
 use raylib::prelude::*;
 use std::collections::HashSet;
-use std::f32::consts::TAU;
+use std::f32::consts::{PI, TAU};
 
 pub struct PhysicsObject {
     pub obj: GameObject,
@@ -13,17 +14,57 @@ pub struct GameObject {
     pub pos: Vector2,
     pub rotation: f32,
     pub color: Color,
+    pub name_tag: String,
 }
-pub struct PhysicsAddition {
-    pub accel: Vector2,
-    pub vel: Vector2,
+pub enum PhysicsAddition {
+    Dynamic {
+        accel: Vector2,
+        vel: Vector2,
+        corners: Vec<Vector2>,
+        mass: f32,
+    },
+    Static {
+        corners: Vec<Vector2>,
+    },
+}
 
-    pub corners: Vec<Vector2>,
-    pub mass: f32,
+impl PhysicsAddition {
+    pub fn generate_regular_polygon(corner_count: usize, radius: f32) -> Vec<Vector2> {
+        let mut corners: Vec<Vector2> = Vec::new();
+        for i in 0..corner_count {
+            let angle: f32 = i as f32 / corner_count as f32 * TAU + PI;
+            let vector_relative: Vector2 = Vector2::new(0., 1.).scale_by(radius).rotated(angle);
+            corners.push(vector_relative);
+        }
+        corners
+    }
+    pub fn get_corners(&self) -> &Vec<Vector2> {
+        match self {
+            Dynamic { corners, .. } => corners,
+            Static { corners, .. } => corners,
+        }
+    }
+    pub fn get_corners_mut(&mut self) -> &mut Vec<Vector2> {
+        match self {
+            Dynamic {
+                ref mut corners, ..
+            } => corners,
+            Static {
+                ref mut corners, ..
+            } => corners,
+        }
+    }
+
+    pub fn get_mass(&self) -> f32 {
+        match self {
+            Dynamic { mass, .. } => *mass,
+            Static { .. } => f32::INFINITY,
+        }
+    }
 }
 
 impl PhysicsObject {
-    pub fn new(pos: Vector2, mass: f32) -> PhysicsObject {
+    pub fn new(pos: Vector2, mass: f32, name_tag: String) -> PhysicsObject {
         let mut rng = rand::rng();
         let color: Color = Color::new(
             rng.random::<u8>(),
@@ -32,18 +73,12 @@ impl PhysicsObject {
             255,
         );
 
-        let radius: f32 = 50.;
-        let mut corners: Vec<Vector2> = Vec::new();
+        // A ~ pi*r*r => r ~ sqrt(A / pi)
+        let radius: f32 = (mass / PI).sqrt();
+        let mut corners: Vec<Vector2> = PhysicsAddition::generate_regular_polygon(rng.random_range(3..10), radius);
 
-        // regular polygon
-        // pentagon
-        let corner_count: usize = 3;
-        for i in 0..corner_count {
-            let angle: f32 = i as f32 / corner_count as f32 * TAU;
-            let vector_relative: Vector2 = Vector2::new(0., 1.)
-                .scale_by(radius)
-                .rotated(angle);
-            corners.push(pos + vector_relative);
+        for c in &mut corners {
+            *c += pos;
         }
 
         PhysicsObject {
@@ -51,8 +86,9 @@ impl PhysicsObject {
                 pos,
                 color,
                 rotation: 0.,
+                name_tag,
             },
-            physics: PhysicsAddition {
+            physics: Dynamic {
                 vel: Vector2::zero(),
                 accel: Vector2::new(0.0, GRAVITY),
                 corners,
@@ -61,63 +97,67 @@ impl PhysicsObject {
         }
     }
 
+    pub fn generate_ground(pos: Vector2) -> PhysicsObject {
+        let mut corners: Vec<Vector2> = PhysicsAddition::generate_regular_polygon(5, 50.);
+
+        for c in &mut corners {
+            *c += pos;
+        }
+
+        PhysicsObject {
+            obj: GameObject {
+                pos,
+                color: Color::BLACK,
+                rotation: 0.,
+                name_tag: "ground_obj".to_string(),
+            },
+            physics: Static { corners },
+        }
+    }
+
+    pub fn generate_walls() -> Vec<PhysicsObject> {
+        let mut result: Vec<PhysicsObject> = Vec::new();
+
+        let wall_points: [(Vector2, Vector2); 4] = [
+            (Vector2::new(0., 0.), Vector2::new(0., HEIGHT_F)),
+            (Vector2::new(0., HEIGHT_F), Vector2::new(WIDTH_F, HEIGHT_F)),
+            (Vector2::new(WIDTH_F, HEIGHT_F), Vector2::new(WIDTH_F, 0.)),
+            (Vector2::new(WIDTH_F, 0.), Vector2::new(0., 0.)),
+        ];
+        for (start, end) in wall_points {
+            let obj: PhysicsObject = PhysicsObject {
+                obj: GameObject {
+                    rotation: 0.,
+                    color: Color::BLACK,
+                    pos: (start + end) / 2.,
+                    name_tag: "wall".to_string(),
+                },
+                physics: Static {
+                    corners: vec![start, end],
+                },
+            };
+            result.push(obj);
+        }
+
+        result
+    }
+
     pub fn resolve_collision_other(&mut self, other: &mut PhysicsObject) {
-        /*
-        let u_normal: Vector2 = (other_obj.pos - self_obj.pos).normalized();
-        let u_tangent: Vector2 = Vector2::new(-u_normal.y, u_normal.x);
-
-        let v1n: f32 = self_physics.vel.dot(u_normal);
-        let v2n: f32 = other_physics.vel.dot(u_normal);
-        let v1t: f32 = self_physics.vel.dot(u_tangent);
-        let v2t: f32 = other_physics.vel.dot(u_tangent);
-
-        let m1: f32 = self_physics.mass;
-        let m2: f32 = other_physics.mass;
-
-        let v1n_new: f32 = (v1n * (m1 - m2) + 2. * m2 * v2n) / (m1 + m2) * BOUNCINESS;
-        let v2n_new: f32 = (v2n * (m2 - m1) + 2. * m1 * v1n) / (m1 + m2) * BOUNCINESS;
-
-        let v1n_new: Vector2 = u_normal.scale_by(v1n_new);
-        let v2n_new: Vector2 = u_normal.scale_by(v2n_new);
-        let v1t_new: Vector2 = u_tangent.scale_by(v1t);
-        let v2t_new: Vector2 = u_tangent.scale_by(v2t);
-
-        // update velocity
-        self_physics.vel = v1n_new + v1t_new;
-        other_physics.vel = v2n_new + v2t_new;
-
-        let dist: f32 = (other_obj.pos - self_obj.pos).length();
-        let overlap: f32 = *self_radius + *other_radius - dist;
-
-        // bias
-        let travel_dist_self: f32 = overlap * m1 / (m1 + m2);
-        let travel_dist_other: f32 = overlap * m2 / (m1 + m2);
-
-        let dir_self_other: Vector2 = (self_obj.pos - other_obj.pos).normalized();
-
-        let correction_self: Vector2 = dir_self_other.scale_by(travel_dist_self);
-        let correction_other: Vector2 = -dir_self_other.scale_by(travel_dist_other);
-
-        // separate objects
-        self_obj.pos += correction_self;
-        other_obj.pos += correction_other;
-         */
-
         let mut u_axes_to_be_checked: Vec<Vector2> = Vec::new();
         u_axes_to_be_checked.extend(self.get_all_u_axes());
         u_axes_to_be_checked.extend(other.get_all_u_axes());
 
-        let mut best_u_axis: &Vector2 = &Default::default();
-        let mut best_dist: f32 = f32::INFINITY;
+        let mut best_u_axis: Vector2 = Default::default();
+        let mut best_overlap: f32 = f32::INFINITY;
 
-        for u_axis in &u_axes_to_be_checked {
+        for u_axis in u_axes_to_be_checked {
             let mut self_min: f32 = f32::INFINITY;
             let mut self_max: f32 = f32::NEG_INFINITY;
             let mut other_min: f32 = f32::INFINITY;
             let mut other_max: f32 = f32::NEG_INFINITY;
 
-            let self_corners: &Vec<Vector2> = &self.physics.corners;
-            let other_corners: &Vec<Vector2> = &other.physics.corners;
+            let self_corners: &Vec<Vector2> = self.physics.get_corners();
+            let other_corners: &Vec<Vector2> = other.physics.get_corners();
             for &c in self_corners {
                 let value: f32 = u_axis.dot(c);
                 self_min = self_min.min(value);
@@ -129,35 +169,66 @@ impl PhysicsObject {
                 other_max = other_max.max(value);
             }
 
-            let resolution_dist_1: f32 = self_max - other_min;
-            let resolution_dist_2: f32 = other_max - self_min;
-            let real_dist: f32 = if resolution_dist_1.abs() < resolution_dist_2.abs() {
-                resolution_dist_1
-            } else {
-                resolution_dist_2
-            };
-            if real_dist < best_dist.abs() {
-                best_dist = real_dist;
+            let overlap: f32 = f32::min(self_max, other_max) - f32::max(self_min, other_min);
+            if overlap < best_overlap {
+                best_overlap = overlap;
                 best_u_axis = u_axis;
             }
         }
 
-        let m1: f32 = self.physics.mass;
-        let m2: f32 = other.physics.mass;
+        let mut move_percentage_self: f32 = 0.5;
+        let mut move_percentage_other: f32 = 0.5;
 
-        let travel_dist_self: f32 = best_dist * m1 / (m1 + m2);
-        let travel_dist_other: f32 = best_dist * m2 / (m1 + m2);
 
-        let correction_self: Vector2 = best_u_axis.scale_by(travel_dist_self);
-        let correction_other: Vector2 = -best_u_axis.scale_by(travel_dist_other);
+        let self_other_dir: Vector2 = other.obj.pos - self.obj.pos;
+
+        if best_u_axis.dot(self_other_dir) < 0.0 {
+            best_u_axis.scale(-1.);
+        }
+
+        let correction_self: Vector2 = -best_u_axis.scale_by(move_percentage_self * best_overlap);
+        let correction_other: Vector2 = best_u_axis.scale_by(move_percentage_other * best_overlap);
 
         // separate objects
         self.move_relative(&correction_self);
         other.move_relative(&correction_other);
-    }
 
-    pub fn resolve_collision_walls(&mut self) {
-        todo!()
+        // update velocity
+        /*
+        let u_tangent: Vector2 = Vector2::new(-best_u_axis.y, best_u_axis.x);
+
+        let mut v1n: f32 = 0.;
+        let mut v1t: f32 = 0.;
+        let mut v2n: f32 = 0.;
+        let mut v2t: f32 = 0.;
+
+        if let Dynamic { ref mut vel, .. } = self.physics {
+            v1n = vel.dot(best_u_axis);
+            v1t = vel.dot(u_tangent);
+        }
+        if let Dynamic { ref mut vel, .. } = other.physics {
+            v2n = vel.dot(best_u_axis);
+            v2t = vel.dot(u_tangent);
+        }
+
+        let v1n_new: f32 = (v1n * (m1 - m2) + 2. * m2 * v2n) / (m1 + m2) * BOUNCINESS;
+        let v1t_new: f32 = v1t;
+        let v2n_new: f32 = (v2n * (m2 - m1) + 2. * m1 * v1n) / (m1 + m2) * BOUNCINESS;
+        let v2t_new: f32 = v2t;
+
+        let v1n_new_v: Vector2 = best_u_axis.scale_by(v1n_new);
+        let v1t_new_v: Vector2 = u_tangent.scale_by(v1t_new);
+        let v2n_new_v: Vector2 = best_u_axis.scale_by(v2n_new);
+        let v2t_new_v: Vector2 = u_tangent.scale_by(v2t_new);
+
+        if let Dynamic { ref mut vel, .. } = self.physics {
+            *vel = v1n_new_v + v1t_new_v;
+        }
+        if let Dynamic { ref mut vel, .. } = other.physics {
+            *vel = v2n_new_v + v2t_new_v;
+        }
+
+         */
     }
 
     pub fn collides_with(&self, other: &PhysicsObject) -> bool {
@@ -171,8 +242,8 @@ impl PhysicsObject {
             let mut other_min: f32 = f32::INFINITY;
             let mut other_max: f32 = f32::NEG_INFINITY;
 
-            let self_corners: &Vec<Vector2> = &self.physics.corners;
-            let other_corners: &Vec<Vector2> = &other.physics.corners;
+            let self_corners: &Vec<Vector2> = self.physics.get_corners();
+            let other_corners: &Vec<Vector2> = other.physics.get_corners();
             for &c in self_corners {
                 let value: f32 = u_axis.dot(c);
                 self_min = self_min.min(value);
@@ -193,7 +264,7 @@ impl PhysicsObject {
 
     pub fn get_all_u_axes(&self) -> Vec<Vector2> {
         let mut result: Vec<Vector2> = Vec::new();
-        let corners: &Vec<Vector2> = &self.physics.corners;
+        let corners: &Vec<Vector2> = self.physics.get_corners();
         for i in 0..corners.len() {
             let c1: Vector2 = corners[i];
             let c2: Vector2 = corners[(i + 1) % corners.len()];
@@ -209,7 +280,7 @@ impl PhysicsObject {
         (cell_count_x, cell_count_y): (usize, usize),
     ) -> HashSet<(usize, usize)> {
         let mut cells_put_into: HashSet<(usize, usize)> = HashSet::new();
-        for corner in &self.physics.corners {
+        for corner in self.physics.get_corners() {
             let cell_coord_x: usize = (corner.x / WIDTH_F * cell_count_x as f32) as usize;
             let cell_coord_y: usize = (corner.y / HEIGHT_F * cell_count_y as f32) as usize;
             cells_put_into.insert((cell_coord_x, cell_coord_y));
@@ -219,36 +290,42 @@ impl PhysicsObject {
     }
 
     pub fn update_move(&mut self, delta_time: f32) {
-        let added_vel: Vector2 = self.physics.accel * delta_time;
-        self.physics.vel += added_vel;
+        match self.physics {
+            Dynamic {
+                accel, ref mut vel, ..
+            } => {
+                let added_vel: Vector2 = accel * delta_time;
+                *vel += added_vel;
 
-        let added_pos: Vector2 = self.physics.vel * delta_time;
-        self.move_relative(&added_pos);
+                let added_pos: Vector2 = *vel * delta_time;
+                self.move_relative(&added_pos);
 
-        let added_rotation: f32 = 0.; // 3. * delta_time;
-        self.obj.rotation += added_rotation;
+                let added_rotation: f32 = 0.; // 3. * delta_time;
+                self.obj.rotation += added_rotation;
 
-
-        // update corner rotation
-        for corner in &mut self.physics.corners {
-            let new_d_vector: Vector2 = (*corner - self.obj.pos).rotated(added_rotation);
-            *corner = self.obj.pos + new_d_vector;
+                // update corner rotation
+                for corner in self.physics.get_corners_mut() {
+                    let new_d_vector: Vector2 = (*corner - self.obj.pos).rotated(added_rotation);
+                    *corner = self.obj.pos + new_d_vector;
+                }
+            }
+            Static { .. } => {
+                // dont do anything
+            }
         }
-
-        self.resolve_collision_walls();
     }
 
     pub fn move_relative(&mut self, added_pos: &Vector2) {
         self.obj.pos += *added_pos;
-        for corner in &mut self.physics.corners {
+        for corner in self.physics.get_corners_mut() {
             *corner += *added_pos;
         }
     }
     pub fn render(&self, d: &mut RaylibDrawHandle) {
-        let corner_count: usize = self.physics.corners.len();
+        let corner_count: usize = self.physics.get_corners().len();
         for i in 0..corner_count {
-            let first_corner: &Vector2 = &self.physics.corners[i];
-            let second_corner: &Vector2 = &self.physics.corners[(i + 1) % corner_count];
+            let first_corner: &Vector2 = &self.physics.get_corners()[i];
+            let second_corner: &Vector2 = &self.physics.get_corners()[(i + 1) % corner_count];
             d.draw_line_ex(first_corner, second_corner, 5., self.obj.color);
         }
     }
