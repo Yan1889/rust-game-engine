@@ -148,8 +148,8 @@ impl PhysicsObject {
                 ..
             } = other.physics
             {
-                v2n = other_vel.dot(best_u_axis);
-                v2t = other_vel.dot(u_tangent);
+                // self: dynamic, other: dynamic
+                (v2n, v2t) = Self::spilt_vel(other_vel, best_u_axis);
 
                 let v1n_new: f32 = (v1n * (m1 - m2) + 2. * m2 * v2n) / (m1 + m2) * BOUNCINESS;
                 let v1t_new: f32 = v1t;
@@ -165,8 +165,7 @@ impl PhysicsObject {
                 *other_vel = v2n_new_v + v2t_new_v;
             } else {
                 // self: dynamic, other: static
-                v1n = self_vel.dot(best_u_axis);
-                v1t = self_vel.dot(u_tangent);
+                (v1n, v1t) = Self::spilt_vel(self_vel, best_u_axis);
 
                 let v1n_new: f32 = -v1n * BOUNCINESS;
                 let v1t_new: f32 = v1t;
@@ -183,8 +182,7 @@ impl PhysicsObject {
                 ..
             } = other.physics
             {
-                v2n = other_vel.dot(best_u_axis);
-                v2t = other_vel.dot(u_tangent);
+                (v2n, v2t) = Self::spilt_vel(other_vel, best_u_axis);
 
                 let v2n_new: f32 = -v2n * BOUNCINESS;
                 let v2t_new: f32 = v2t;
@@ -271,6 +269,11 @@ impl PhysicsObject {
             }
         }
         result
+    }
+
+    pub fn spilt_vel(vel: &Vector2, u_axis: Vector2) -> (f32, f32) {
+        let u_tangent: Vector2 = Vector2::new(-u_axis.y, u_axis.x);
+        (vel.dot(u_axis), vel.dot(u_tangent))
     }
 
     pub fn update_move(&mut self, delta_time: f32) {
