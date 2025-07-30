@@ -4,4 +4,4 @@ pub const WIDTH_F: f32 = 1080.;
 pub const HEIGHT_F: f32 = 720.;
 pub const BOUNCINESS: f32 = 0.9;
 
-pub const GRAVITY: f32 = 0.;
+pub const GRAVITY: f32 = 100.;

@@ -32,10 +32,23 @@ impl PhysicsAddition {
     pub fn generate_regular_polygon(corner_count: usize, radius: f32) -> Vec<Vector2> {
         let mut corners: Vec<Vector2> = Vec::new();
         for i in 0..corner_count {
-            let angle: f32 = i as f32 / corner_count as f32 * TAU + PI;
+            let angle: f32 = i as f32 / corner_count as f32 * TAU + 0.9 * PI;
             let vector_relative: Vector2 = Vector2::new(0., 1.).scale_by(radius).rotated(angle);
             corners.push(vector_relative);
         }
+        corners
+    }
+
+    pub fn generate_polygon_line(start: Vector2, end: Vector2) -> Vec<Vector2> {
+        let u_normal: Vector2 = (end - start).normalized();
+        let u_tangent: Vector2 = Vector2::new(-u_normal.y, u_normal.x);
+
+        let thickness: f32 = 10.;
+        let mut corners: Vec<Vector2> = Vec::new();
+        corners.push(end - u_tangent * thickness);
+        corners.push(start - u_tangent * thickness);
+        corners.push(start + u_tangent * thickness);
+        corners.push(end + u_tangent * thickness);
         corners
     }
     pub fn get_corners(&self) -> &Vec<Vector2> {
@@ -76,7 +89,7 @@ impl PhysicsObject {
         // A ~ pi*r*r => r ~ sqrt(A / pi)
         let radius: f32 = (mass / PI).sqrt();
         let mut corners: Vec<Vector2> =
-            PhysicsAddition::generate_regular_polygon(rng.random_range(3..10), radius);
+            PhysicsAddition::generate_regular_polygon(rng.random_range(3..=8), radius);
 
         for c in &mut corners {
             *c += pos;
@@ -85,6 +98,35 @@ impl PhysicsObject {
         PhysicsObject {
             obj: GameObject {
                 pos,
+                color,
+                rotation: 0.,
+                name_tag,
+            },
+            physics: Dynamic {
+                vel: Vector2::zero(),
+                accel: Vector2::new(0.0, GRAVITY),
+                corners,
+                mass,
+            },
+        }
+    }
+
+    pub fn new_line(start: Vector2, end: Vector2, name_tag: String) -> PhysicsObject {
+        let mut rng = rand::rng();
+        let color: Color = Color::new(
+            rng.random::<u8>(),
+            rng.random::<u8>(),
+            rng.random::<u8>(),
+            255,
+        );
+
+        let corners: Vec<Vector2> = PhysicsAddition::generate_polygon_line(start, end);
+        let radius: f32 = (end - start).length() / 2.;
+        let mass: f32 = PI * radius * radius;
+
+        PhysicsObject {
+            obj: GameObject {
+                pos: (end + start) / 2.,
                 color,
                 rotation: 0.,
                 name_tag,
@@ -126,6 +168,7 @@ impl PhysicsObject {
             (Vector2::new(WIDTH_F, 0.), Vector2::new(0., 0.)),
         ];
         for (start, end) in wall_points {
+            let corners: Vec<Vector2> = PhysicsAddition::generate_polygon_line(start, end);
             let obj: PhysicsObject = PhysicsObject {
                 obj: GameObject {
                     rotation: 0.,
@@ -134,7 +177,7 @@ impl PhysicsObject {
                     name_tag: "wall".to_string(),
                 },
                 physics: Static {
-                    corners: vec![start, end],
+                    corners
                 },
             };
             result.push(obj);
@@ -144,16 +187,19 @@ impl PhysicsObject {
     }
 
     pub fn resolve_collision_other(&mut self, other: &mut PhysicsObject) {
+        // return if none is dynamic
+        if matches!(
+            (&self.physics, &other.physics),
+            (Static { .. }, Static { .. })
+        ) {
+            return;
+        }
+
         let collision_result = self.get_collision_axis_and_overlap(other);
         if collision_result.is_none() {
             return;
         }
-        let (mut best_u_axis, overlap) = collision_result.unwrap();
-
-        let self_other_dir: Vector2 = other.obj.pos - self.obj.pos;
-        if best_u_axis.dot(self_other_dir) < 0.0 {
-            best_u_axis.scale(-1.);
-        }
+        let (best_u_axis, overlap) = collision_result.unwrap();
 
         let m1: f32 = if let Dynamic { mass, .. } = &self.physics {
             *mass
@@ -168,18 +214,9 @@ impl PhysicsObject {
 
         let m1_inverse: f32 = if m1 == 0. { 0. } else { 1. / m1 };
         let m2_inverse: f32 = if m2 == 0. { 0. } else { 1. / m2 };
-        let m_inverse_sum: f32 = m1_inverse + m2_inverse;
 
-        let move_percentage_self: f32 = if m_inverse_sum == 0. {
-            0.
-        } else {
-            m1_inverse / m_inverse_sum
-        };
-        let move_percentage_other: f32 = if m_inverse_sum == 0. {
-            0.
-        } else {
-            m2_inverse / m_inverse_sum
-        };
+        let move_percentage_self: f32 = m1_inverse / (m1_inverse + m2_inverse);
+        let move_percentage_other: f32 = m2_inverse / (m1_inverse + m2_inverse);
 
         let correction_self: Vector2 = -best_u_axis.scale_by(move_percentage_self * overlap);
         let correction_other: Vector2 = best_u_axis.scale_by(move_percentage_other * overlap);
@@ -188,8 +225,8 @@ impl PhysicsObject {
         self.move_relative(&correction_self);
         other.move_relative(&correction_other);
 
+
         // update velocity
-        /*
         let u_tangent: Vector2 = Vector2::new(-best_u_axis.y, best_u_axis.x);
 
         let mut v1n: f32 = 0.;
@@ -197,33 +234,54 @@ impl PhysicsObject {
         let mut v2n: f32 = 0.;
         let mut v2t: f32 = 0.;
 
-        if let Dynamic { ref mut vel, .. } = self.physics {
-            v1n = vel.dot(best_u_axis);
-            v1t = vel.dot(u_tangent);
-        }
-        if let Dynamic { ref mut vel, .. } = other.physics {
-            v2n = vel.dot(best_u_axis);
-            v2t = vel.dot(u_tangent);
-        }
+        if let Dynamic { vel: ref mut self_vel, .. } = self.physics {
+            v1n = self_vel.dot(best_u_axis);
+            v1t = self_vel.dot(u_tangent);
 
-        let v1n_new: f32 = (v1n * (m1 - m2) + 2. * m2 * v2n) / (m1 + m2) * BOUNCINESS;
-        let v1t_new: f32 = v1t;
-        let v2n_new: f32 = (v2n * (m2 - m1) + 2. * m1 * v1n) / (m1 + m2) * BOUNCINESS;
-        let v2t_new: f32 = v2t;
+            if let Dynamic { vel: ref mut other_vel, .. } = other.physics {
+                v2n = other_vel.dot(best_u_axis);
+                v2t = other_vel.dot(u_tangent);
 
-        let v1n_new_v: Vector2 = best_u_axis.scale_by(v1n_new);
-        let v1t_new_v: Vector2 = u_tangent.scale_by(v1t_new);
-        let v2n_new_v: Vector2 = best_u_axis.scale_by(v2n_new);
-        let v2t_new_v: Vector2 = u_tangent.scale_by(v2t_new);
+                let v1n_new: f32 = (v1n * (m1 - m2) + 2. * m2 * v2n) / (m1 + m2) * BOUNCINESS;
+                let v1t_new: f32 = v1t;
+                let v2n_new: f32 = (v2n * (m2 - m1) + 2. * m1 * v1n) / (m1 + m2) * BOUNCINESS;
+                let v2t_new: f32 = v2t;
 
-        if let Dynamic { ref mut vel, .. } = self.physics {
-            *vel = v1n_new_v + v1t_new_v;
+                let v1n_new_v: Vector2 = best_u_axis.scale_by(v1n_new);
+                let v1t_new_v: Vector2 = u_tangent.scale_by(v1t_new);
+                let v2n_new_v: Vector2 = best_u_axis.scale_by(v2n_new);
+                let v2t_new_v: Vector2 = u_tangent.scale_by(v2t_new);
+
+                *self_vel = v1n_new_v + v1t_new_v;
+                *other_vel = v2n_new_v + v2t_new_v;
+            } else {
+                // self: dynamic, other: static
+                v1n = self_vel.dot(best_u_axis);
+                v1t = self_vel.dot(u_tangent);
+
+                let v1n_new: f32 = -v1n * BOUNCINESS;
+                let v1t_new: f32 = v1t;
+
+                let v1n_new_v: Vector2 = best_u_axis.scale_by(v1n_new);
+                let v1t_new_v: Vector2 = u_tangent.scale_by(v1t_new);
+
+                *self_vel = v1n_new_v + v1t_new_v;
+            }
+        } else {
+            // self: static, other: dynamic
+            if let Dynamic { vel: ref mut other_vel, .. } = other.physics {
+                v2n = other_vel.dot(best_u_axis);
+                v2t = other_vel.dot(u_tangent);
+
+                let v2n_new: f32 = -v2n * BOUNCINESS;
+                let v2t_new: f32 = v2t;
+
+                let v2n_new_v: Vector2 = best_u_axis.scale_by(v2n_new);
+                let v2t_new_v: Vector2 = u_tangent.scale_by(v2t_new);
+
+                *other_vel = v2n_new_v + v2t_new_v;
+            }
         }
-        if let Dynamic { ref mut vel, .. } = other.physics {
-            *vel = v2n_new_v + v2t_new_v;
-        }
-
-         */
     }
 
     pub fn get_collision_axis_and_overlap(&self, other: &PhysicsObject) -> Option<(Vector2, f32)> {
@@ -234,33 +292,35 @@ impl PhysicsObject {
         let mut smallest_overlap: f32 = f32::INFINITY;
         let mut best_u_axis: Vector2 = Vector2::zero();
 
-        for u_axis in u_axes_to_be_checked {
+        let dir_self_other: Vector2 = other.obj.pos - self.obj.pos;
+        for u_axis in &mut u_axes_to_be_checked {
+            if u_axis.dot(dir_self_other) < 0.0 {
+                u_axis.scale(-1.);
+            }
             let mut self_min: f32 = f32::INFINITY;
             let mut self_max: f32 = f32::NEG_INFINITY;
             let mut other_min: f32 = f32::INFINITY;
             let mut other_max: f32 = f32::NEG_INFINITY;
 
-            let self_corners: &Vec<Vector2> = self.physics.get_corners();
-            let other_corners: &Vec<Vector2> = other.physics.get_corners();
-            for &c in self_corners {
-                let value: f32 = u_axis.dot(c);
+            for c in self.physics.get_corners() {
+                let value: f32 = u_axis.dot(*c);
                 self_min = self_min.min(value);
                 self_max = self_max.max(value);
             }
-            for &c in other_corners {
-                let value: f32 = u_axis.dot(c);
+            for c in other.physics.get_corners() {
+                let value: f32 = u_axis.dot(*c);
                 other_min = other_min.min(value);
                 other_max = other_max.max(value);
             }
             // check separating axis theorem
-            if self_max <= other_min || other_max <= self_min {
+            if self_max < other_min || other_max < self_min {
                 return None;
             }
 
             let overlap: f32 = f32::min(self_max, other_max) - f32::max(self_min, other_min);
             if overlap < smallest_overlap {
                 smallest_overlap = overlap;
-                best_u_axis = u_axis;
+                best_u_axis = *u_axis;
             }
         }
         Some((best_u_axis, smallest_overlap))
@@ -284,8 +344,8 @@ impl PhysicsObject {
     ) -> HashSet<(usize, usize)> {
         let mut cells_put_into: HashSet<(usize, usize)> = HashSet::new();
         for corner in self.physics.get_corners() {
-            let cell_coord_x: usize = (corner.x / WIDTH_F * cell_count_x as f32) as usize;
-            let cell_coord_y: usize = (corner.y / HEIGHT_F * cell_count_y as f32) as usize;
+            let cell_coord_x: usize = (corner.x / (WIDTH_F + 0.1) * cell_count_x as f32) as usize;
+            let cell_coord_y: usize = (corner.y / (HEIGHT_F + 0.1) * cell_count_y as f32) as usize;
             cells_put_into.insert((cell_coord_x, cell_coord_y));
         }
 

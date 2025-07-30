@@ -21,7 +21,7 @@ impl Scene {
         Self {
             timers: vec![],
             game_objects: vec![],
-            space_partitioning_grid_size: (3, 3),
+            space_partitioning_grid_size: (1, 1),
             rl,
             rl_thread,
         }
@@ -47,22 +47,24 @@ impl Scene {
         }
 
 
+        let possible_collisions: HashSet<(usize, usize)> = self.get_possible_collisions();
+        let real_collisions: Vec<(usize, usize)> = self.filter_real_collisions(possible_collisions);
+        self.resolve_collisions(&real_collisions);
+
+        /*
         for obj in &mut self.game_objects {
             obj.obj.color = Color::BLUE;
         }
-
-        let possible_collisions: HashSet<(usize, usize)> = self.get_possible_collisions();
 
         for &(i, j) in &possible_collisions {
             self.game_objects[i].obj.color = Color::ORANGE;
             self.game_objects[j].obj.color = Color::ORANGE;
         }
-        let real_collisions = self.filter_real_collisions(possible_collisions);
         for &(i, j) in &real_collisions {
             self.game_objects[i].obj.color = Color::RED;
             self.game_objects[j].obj.color = Color::RED;
         }
-        self.resolve_collisions(&real_collisions);
+         */
     }
 
     // todo

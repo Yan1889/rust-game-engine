@@ -27,11 +27,19 @@ pub fn frame(scene: &mut Scene, delta_time: f32) {
     let mut rng = rand::rng();
 
     if scene.mouse_clicked() {
+        /*
+        let mut obj: PhysicsObject = PhysicsObject::new_line(
+            scene.mouse_pos(),
+            scene.mouse_pos() + Vector2::new(50., 50.),
+            "_".to_string(),
+        );
+         */
         let mut obj: PhysicsObject = PhysicsObject::new(
             scene.mouse_pos(),
             rng.random::<f32>() * 3000.,
-            "bot".to_string(),
+            "_".to_string(),
         );
+
         if let PhysicsAddition::Dynamic {ref mut vel, ..} = obj.physics {
             *vel = Vector2::new(0., 0.);
         }
