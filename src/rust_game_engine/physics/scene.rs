@@ -42,7 +42,7 @@ impl Scene {
     ) -> Vec<(usize, usize)> {
         // collision detection - narrow phase
         possible_collisions.drain().filter(|&(i, j)| {
-            self.game_objects[i].collides_with(&self.game_objects[j])
+            self.game_objects[i].get_collision_axis_and_overlap(&self.game_objects[j]).is_some()
         }).collect()
     }
 

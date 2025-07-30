@@ -40,7 +40,7 @@ pub fn frame(scene: &mut Scene, delta_time: f32) {
 
     let key_dir: Vector2 = scene.get_key_direction();
     let main_obj: &mut PhysicsObject = scene.game_objects.first_mut().unwrap();
-    main_obj.move_relative(&(key_dir * 0.1));
+    main_obj.move_relative(&(key_dir * 100. * delta_time));
 
     if scene.timers.is_empty() {
         // spawn_one_timer(scene);

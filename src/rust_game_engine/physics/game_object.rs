@@ -75,7 +75,8 @@ impl PhysicsObject {
 
         // A ~ pi*r*r => r ~ sqrt(A / pi)
         let radius: f32 = (mass / PI).sqrt();
-        let mut corners: Vec<Vector2> = PhysicsAddition::generate_regular_polygon(rng.random_range(3..10), radius);
+        let mut corners: Vec<Vector2> =
+            PhysicsAddition::generate_regular_polygon(rng.random_range(3..10), radius);
 
         for c in &mut corners {
             *c += pos;
@@ -143,51 +144,45 @@ impl PhysicsObject {
     }
 
     pub fn resolve_collision_other(&mut self, other: &mut PhysicsObject) {
-        let mut u_axes_to_be_checked: Vec<Vector2> = Vec::new();
-        u_axes_to_be_checked.extend(self.get_all_u_axes());
-        u_axes_to_be_checked.extend(other.get_all_u_axes());
-
-        let mut best_u_axis: Vector2 = Default::default();
-        let mut best_overlap: f32 = f32::INFINITY;
-
-        for u_axis in u_axes_to_be_checked {
-            let mut self_min: f32 = f32::INFINITY;
-            let mut self_max: f32 = f32::NEG_INFINITY;
-            let mut other_min: f32 = f32::INFINITY;
-            let mut other_max: f32 = f32::NEG_INFINITY;
-
-            let self_corners: &Vec<Vector2> = self.physics.get_corners();
-            let other_corners: &Vec<Vector2> = other.physics.get_corners();
-            for &c in self_corners {
-                let value: f32 = u_axis.dot(c);
-                self_min = self_min.min(value);
-                self_max = self_max.max(value);
-            }
-            for &c in other_corners {
-                let value: f32 = u_axis.dot(c);
-                other_min = other_min.min(value);
-                other_max = other_max.max(value);
-            }
-
-            let overlap: f32 = f32::min(self_max, other_max) - f32::max(self_min, other_min);
-            if overlap < best_overlap {
-                best_overlap = overlap;
-                best_u_axis = u_axis;
-            }
+        let collision_result = self.get_collision_axis_and_overlap(other);
+        if collision_result.is_none() {
+            return;
         }
-
-        let mut move_percentage_self: f32 = 0.5;
-        let mut move_percentage_other: f32 = 0.5;
-
+        let (mut best_u_axis, overlap) = collision_result.unwrap();
 
         let self_other_dir: Vector2 = other.obj.pos - self.obj.pos;
-
         if best_u_axis.dot(self_other_dir) < 0.0 {
             best_u_axis.scale(-1.);
         }
 
-        let correction_self: Vector2 = -best_u_axis.scale_by(move_percentage_self * best_overlap);
-        let correction_other: Vector2 = best_u_axis.scale_by(move_percentage_other * best_overlap);
+        let m1: f32 = if let Dynamic { mass, .. } = &self.physics {
+            *mass
+        } else {
+            0.
+        };
+        let m2: f32 = if let Dynamic { mass, .. } = &other.physics {
+            *mass
+        } else {
+            0.
+        };
+
+        let m1_inverse: f32 = if m1 == 0. { 0. } else { 1. / m1 };
+        let m2_inverse: f32 = if m2 == 0. { 0. } else { 1. / m2 };
+        let m_inverse_sum: f32 = m1_inverse + m2_inverse;
+
+        let move_percentage_self: f32 = if m_inverse_sum == 0. {
+            0.
+        } else {
+            m1_inverse / m_inverse_sum
+        };
+        let move_percentage_other: f32 = if m_inverse_sum == 0. {
+            0.
+        } else {
+            m2_inverse / m_inverse_sum
+        };
+
+        let correction_self: Vector2 = -best_u_axis.scale_by(move_percentage_self * overlap);
+        let correction_other: Vector2 = best_u_axis.scale_by(move_percentage_other * overlap);
 
         // separate objects
         self.move_relative(&correction_self);
@@ -231,10 +226,13 @@ impl PhysicsObject {
          */
     }
 
-    pub fn collides_with(&self, other: &PhysicsObject) -> bool {
+    pub fn get_collision_axis_and_overlap(&self, other: &PhysicsObject) -> Option<(Vector2, f32)> {
         let mut u_axes_to_be_checked: Vec<Vector2> = Vec::new();
         u_axes_to_be_checked.extend(self.get_all_u_axes());
         u_axes_to_be_checked.extend(other.get_all_u_axes());
+
+        let mut smallest_overlap: f32 = f32::INFINITY;
+        let mut best_u_axis: Vector2 = Vector2::zero();
 
         for u_axis in u_axes_to_be_checked {
             let mut self_min: f32 = f32::INFINITY;
@@ -255,13 +253,18 @@ impl PhysicsObject {
                 other_max = other_max.max(value);
             }
             // check separating axis theorem
-            if self_max < other_min || other_max < self_min {
-                return false;
+            if self_max <= other_min || other_max <= self_min {
+                return None;
+            }
+
+            let overlap: f32 = f32::min(self_max, other_max) - f32::max(self_min, other_min);
+            if overlap < smallest_overlap {
+                smallest_overlap = overlap;
+                best_u_axis = u_axis;
             }
         }
-        true
+        Some((best_u_axis, smallest_overlap))
     }
-
     pub fn get_all_u_axes(&self) -> Vec<Vector2> {
         let mut result: Vec<Vector2> = Vec::new();
         let corners: &Vec<Vector2> = self.physics.get_corners();
