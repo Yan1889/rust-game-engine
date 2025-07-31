@@ -128,20 +128,12 @@ impl PhysicsObject {
         other.move_relative(&correction_other);
 
         // update velocity
-        let u_tangent: Vector2 = Vector2::new(-best_u_axis.y, best_u_axis.x);
-
-        let mut v1n: f32 = 0.;
-        let mut v1t: f32 = 0.;
-        let mut v2n: f32 = 0.;
-        let mut v2t: f32 = 0.;
-
         if let Dynamic {
             vel: ref mut self_vel,
             ..
         } = self.physics
         {
-            v1n = self_vel.dot(best_u_axis);
-            v1t = self_vel.dot(u_tangent);
+            let (v1n, v1t) = Self::unwrap_vec(self_vel, best_u_axis);
 
             if let Dynamic {
                 vel: ref mut other_vel,
@@ -149,31 +141,18 @@ impl PhysicsObject {
             } = other.physics
             {
                 // self: dynamic, other: dynamic
-                (v2n, v2t) = Self::spilt_vel(other_vel, best_u_axis);
+                let (v2n, v2t) = Self::unwrap_vec(other_vel, best_u_axis);
 
+                // calculating new normal velocities (tangent remain same)
                 let v1n_new: f32 = (v1n * (m1 - m2) + 2. * m2 * v2n) / (m1 + m2) * BOUNCINESS;
-                let v1t_new: f32 = v1t;
                 let v2n_new: f32 = (v2n * (m2 - m1) + 2. * m1 * v1n) / (m1 + m2) * BOUNCINESS;
-                let v2t_new: f32 = v2t;
 
-                let v1n_new_v: Vector2 = best_u_axis.scale_by(v1n_new);
-                let v1t_new_v: Vector2 = u_tangent.scale_by(v1t_new);
-                let v2n_new_v: Vector2 = best_u_axis.scale_by(v2n_new);
-                let v2t_new_v: Vector2 = u_tangent.scale_by(v2t_new);
-
-                *self_vel = v1n_new_v + v1t_new_v;
-                *other_vel = v2n_new_v + v2t_new_v;
+                *self_vel = Self::wrap_vec(v1n_new, v1t, best_u_axis);
+                *other_vel = Self::wrap_vec(v2n_new, v2t, best_u_axis);
             } else {
                 // self: dynamic, other: static
-                (v1n, v1t) = Self::spilt_vel(self_vel, best_u_axis);
-
                 let v1n_new: f32 = -v1n * BOUNCINESS;
-                let v1t_new: f32 = v1t;
-
-                let v1n_new_v: Vector2 = best_u_axis.scale_by(v1n_new);
-                let v1t_new_v: Vector2 = u_tangent.scale_by(v1t_new);
-
-                *self_vel = v1n_new_v + v1t_new_v;
+                *self_vel = Self::wrap_vec(v1n_new, v1t, best_u_axis);
             }
         } else {
             // self: static, other: dynamic
@@ -182,15 +161,12 @@ impl PhysicsObject {
                 ..
             } = other.physics
             {
-                (v2n, v2t) = Self::spilt_vel(other_vel, best_u_axis);
+                let (v2n, v2t) = Self::unwrap_vec(other_vel, best_u_axis);
 
+                // flip the normal component
                 let v2n_new: f32 = -v2n * BOUNCINESS;
-                let v2t_new: f32 = v2t;
 
-                let v2n_new_v: Vector2 = best_u_axis.scale_by(v2n_new);
-                let v2t_new_v: Vector2 = u_tangent.scale_by(v2t_new);
-
-                *other_vel = v2n_new_v + v2t_new_v;
+                *other_vel = Self::wrap_vec(v2n_new, v2t, best_u_axis);
             }
         }
     }
@@ -271,9 +247,15 @@ impl PhysicsObject {
         result
     }
 
-    pub fn spilt_vel(vel: &Vector2, u_axis: Vector2) -> (f32, f32) {
+    pub fn unwrap_vec(vel: &Vector2, u_axis: Vector2) -> (f32, f32) {
         let u_tangent: Vector2 = Vector2::new(-u_axis.y, u_axis.x);
         (vel.dot(u_axis), vel.dot(u_tangent))
+    }
+    pub fn wrap_vec(n: f32, t: f32, u_axis: Vector2) -> Vector2 {
+        let u_tangent: Vector2 = Vector2::new(-u_axis.y, u_axis.x);
+        let n_v: Vector2 = u_axis.scale_by(n);
+        let t_v: Vector2 = u_tangent.scale_by(t);
+        n_v + t_v
     }
 
     pub fn update_move(&mut self, delta_time: f32) {
