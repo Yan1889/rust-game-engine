@@ -4,10 +4,11 @@ use crate::rust_game_engine::physics::physics_addition::*;
 use rand::prelude::*;
 use raylib::prelude::*;
 use std::collections::HashSet;
-use std::f32::consts::{PI, TAU};
+use std::f32::consts::PI;
 
 pub struct PhysicsObject {
     pub obj: GameObject,
+    pub polygon: Polygon,
     pub physics: PhysicsAddition,
 }
 
@@ -42,9 +43,9 @@ impl PhysicsObject {
             physics: Dynamic {
                 vel: Vector2::zero(),
                 accel: Vector2::new(0.0, GRAVITY),
-                polygon,
                 mass,
             },
+            polygon,
         }
     }
 
@@ -58,7 +59,8 @@ impl PhysicsObject {
                 rotation: 0.,
                 name_tag: "ground_obj".to_string(),
             },
-            physics: Static { polygon },
+            physics: Static,
+            polygon,
         }
     }
 
@@ -80,7 +82,8 @@ impl PhysicsObject {
                     pos: (start + end) / 2.,
                     name_tag: "wall".to_string(),
                 },
-                physics: Static { polygon },
+                physics: Static,
+                polygon,
             };
             result.push(obj);
         }
@@ -90,10 +93,7 @@ impl PhysicsObject {
 
     pub fn resolve_collision_other(&mut self, other: &mut PhysicsObject) {
         // return if none is dynamic
-        if matches!(
-            (&self.physics, &other.physics),
-            (Static { .. }, Static { .. })
-        ) {
+        if matches!((&self.physics, &other.physics), (Static, Static)) {
             return;
         }
 
@@ -189,12 +189,12 @@ impl PhysicsObject {
             let mut other_min: f32 = f32::INFINITY;
             let mut other_max: f32 = f32::NEG_INFINITY;
 
-            for c in &self.physics.get_polygon().corners {
+            for c in &self.polygon.corners {
                 let value: f32 = u_axis.dot(*c);
                 self_min = self_min.min(value);
                 self_max = self_max.max(value);
             }
-            for c in &other.physics.get_polygon().corners {
+            for c in &other.polygon.corners {
                 let value: f32 = u_axis.dot(*c);
                 other_min = other_min.min(value);
                 other_max = other_max.max(value);
@@ -214,7 +214,7 @@ impl PhysicsObject {
     }
     pub fn get_all_u_axes(&self) -> Vec<Vector2> {
         let mut result: Vec<Vector2> = Vec::new();
-        let corners: &Vec<Vector2> = &self.physics.get_polygon().corners;
+        let corners: &Vec<Vector2> = &self.polygon.corners;
         for i in 0..corners.len() {
             let c1: Vector2 = corners[i];
             let c2: Vector2 = corners[(i + 1) % corners.len()];
@@ -234,7 +234,7 @@ impl PhysicsObject {
             let y_new: usize = (y / HEIGHT_F * cell_count_y as f32) as usize;
             (x_new, y_new)
         };
-        let bb: Rectangle = self.physics.get_polygon().bounding_box;
+        let bb: Rectangle = self.polygon.bounding_box;
         let (start_x_cell, start_y_cell) = to_cell_coords(bb.x, bb.y);
         let (end_x_cell, end_y_cell) = to_cell_coords(bb.x + bb.width, bb.y + bb.height);
 
@@ -273,22 +273,20 @@ impl PhysicsObject {
                 self.obj.rotation += added_rotation;
 
                 // update corner rotation
-                for corner in &mut self.physics.get_polygon_mut().corners {
+                for corner in &mut self.polygon.corners {
                     let new_d_vector: Vector2 = (*corner - self.obj.pos).rotated(added_rotation);
                     *corner = self.obj.pos + new_d_vector;
                 }
             }
-            Static { .. } => {
-                // dont do anything
-            }
+            Static => {}
         }
     }
 
     pub fn move_relative(&mut self, added_pos: &Vector2) {
         self.obj.pos += *added_pos;
-        self.physics.get_polygon_mut().move_relative(added_pos);
+        self.polygon.move_relative(added_pos);
     }
     pub fn render(&self, d: &mut RaylibDrawHandle) {
-        self.physics.get_polygon().render(d, self.obj.color);
+        self.polygon.render(d, self.obj.color);
     }
 }

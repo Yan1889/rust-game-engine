@@ -151,7 +151,3 @@ impl Scene {
         self.rl.get_random_value(num)
     }
 }
-
-pub fn clamp(value: &mut f32, min: &f32, max: &f32) {
-    *value = value.min(*max).max(*min);
-}

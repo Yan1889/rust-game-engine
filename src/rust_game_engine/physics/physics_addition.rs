@@ -1,9 +1,7 @@
-use crate::rust_game_engine::physics::physics_addition::PhysicsAddition::{Dynamic, Static};
-use raylib::math::{Rectangle, Vector2};
-use std::f32::consts::{PI, TAU};
-use std::result;
 use raylib::drawing::{RaylibDraw, RaylibDrawHandle};
+use raylib::math::{Rectangle, Vector2};
 use raylib::prelude::Color;
+use std::f32::consts::{PI, TAU};
 
 pub struct Polygon {
     pub corners: Vec<Vector2>,
@@ -14,29 +12,13 @@ pub enum PhysicsAddition {
         accel: Vector2,
         vel: Vector2,
         mass: f32,
-        polygon: Polygon,
     },
-    Static {
-        polygon: Polygon,
-    },
+    Static,
 }
 
 impl PhysicsAddition {
-    pub fn get_polygon(&self) -> &Polygon {
-        match self {
-            Dynamic { ref polygon, .. } => polygon,
-            Static { ref polygon, .. } => polygon,
-        }
-    }
-    pub fn get_polygon_mut(&mut self) -> &mut Polygon {
-        match self {
-            Dynamic {
-                ref mut polygon, ..
-            } => polygon,
-            Static {
-                ref mut polygon, ..
-            } => polygon,
-        }
+    pub fn is_static(&self) -> bool {
+        matches!(self, PhysicsAddition::Static)
     }
 }
 
