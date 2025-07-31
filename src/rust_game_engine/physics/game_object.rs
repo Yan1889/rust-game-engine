@@ -44,6 +44,7 @@ impl PhysicsObject {
                 vel: Vector2::zero(),
                 accel: Vector2::new(0.0, GRAVITY),
                 mass,
+                inv_mass: 1. / mass,
             },
             polygon,
         }
@@ -96,77 +97,57 @@ impl PhysicsObject {
         if matches!((&self.physics, &other.physics), (Static, Static)) {
             return;
         }
-
-        let collision_result = self.get_collision_axis_and_overlap(other);
-        if collision_result.is_none() {
+        let Some((u_axis, overlap)) = self.get_collision_axis_and_overlap(other) else {
             return;
-        }
-        let (best_u_axis, overlap) = collision_result.unwrap();
-
-        let m1: f32 = if let Dynamic { mass, .. } = &self.physics {
-            *mass
-        } else {
-            0.
-        };
-        let m2: f32 = if let Dynamic { mass, .. } = &other.physics {
-            *mass
-        } else {
-            0.
         };
 
-        let m1_inverse: f32 = if m1 == 0. { 0. } else { 1. / m1 };
-        let m2_inverse: f32 = if m2 == 0. { 0. } else { 1. / m2 };
+        let (m1, m1_inv): (f32, f32) = self.physics.get_masses();
+        let (m2, m2_inv): (f32, f32) = other.physics.get_masses();
 
-        let move_percentage_self: f32 = m1_inverse / (m1_inverse + m2_inverse);
-        let move_percentage_other: f32 = m2_inverse / (m1_inverse + m2_inverse);
+        let move_percentage_self: f32 = m1_inv / (m1_inv + m2_inv);
+        let move_percentage_other: f32 = m2_inv / (m1_inv + m2_inv);
 
-        let correction_self: Vector2 = -best_u_axis.scale_by(move_percentage_self * overlap);
-        let correction_other: Vector2 = best_u_axis.scale_by(move_percentage_other * overlap);
+        let correction_self: Vector2 = -u_axis.scale_by(move_percentage_self * overlap);
+        let correction_other: Vector2 = u_axis.scale_by(move_percentage_other * overlap);
 
         // separate objects
         self.move_relative(&correction_self);
         other.move_relative(&correction_other);
 
         // update velocity
-        if let Dynamic {
-            vel: ref mut self_vel,
-            ..
-        } = self.physics
-        {
-            let (v1n, v1t) = Self::unwrap_vec(self_vel, best_u_axis);
+        match (self.physics.is_dynamic(), other.physics.is_dynamic()) {
+            (true, true) => {
+                let self_vel = self.physics.get_vel_mut().unwrap();
+                let other_vel = other.physics.get_vel_mut().unwrap();
 
-            if let Dynamic {
-                vel: ref mut other_vel,
-                ..
-            } = other.physics
-            {
-                // self: dynamic, other: dynamic
-                let (v2n, v2t) = Self::unwrap_vec(other_vel, best_u_axis);
+                let (v1n, v1t) = Self::unwrap_vec(self_vel, u_axis);
+                let (v2n, v2t) = Self::unwrap_vec(other_vel, u_axis);
 
                 // calculating new normal velocities (tangent remain same)
                 let v1n_new: f32 = (v1n * (m1 - m2) + 2. * m2 * v2n) / (m1 + m2) * BOUNCINESS;
                 let v2n_new: f32 = (v2n * (m2 - m1) + 2. * m1 * v1n) / (m1 + m2) * BOUNCINESS;
 
-                *self_vel = Self::wrap_vec(v1n_new, v1t, best_u_axis);
-                *other_vel = Self::wrap_vec(v2n_new, v2t, best_u_axis);
-            } else {
-                // self: dynamic, other: static
-                let v1n_new: f32 = -v1n * BOUNCINESS;
-                *self_vel = Self::wrap_vec(v1n_new, v1t, best_u_axis);
+                *self_vel = Self::wrap_vec(v1n_new, v1t, u_axis);
+                *other_vel = Self::wrap_vec(v2n_new, v2t, u_axis);
             }
-        } else {
-            // self: static, other: dynamic
-            if let Dynamic {
-                vel: ref mut other_vel,
-                ..
-            } = other.physics
-            {
-                let (v2n, v2t) = Self::unwrap_vec(other_vel, best_u_axis);
+            (true, false) => {
+                let self_vel = self.physics.get_vel_mut().unwrap();
 
-                // flip the normal component
+                let (v1n, v1t) = Self::unwrap_vec(self_vel, u_axis);
+
+                let v1n_new: f32 = -v1n * BOUNCINESS;
+                *self_vel = Self::wrap_vec(v1n_new, v1t, u_axis);
+            }
+            (false, true) => {
+                let other_vel = other.physics.get_vel_mut().unwrap();
+
+                let (v2n, v2t) = Self::unwrap_vec(other_vel, u_axis);
+
                 let v2n_new: f32 = -v2n * BOUNCINESS;
-
-                *other_vel = Self::wrap_vec(v2n_new, v2t, best_u_axis);
+                *other_vel = Self::wrap_vec(v2n_new, v2t, u_axis);
+            }
+            (false, false) => {
+                unreachable!();
             }
         }
     }

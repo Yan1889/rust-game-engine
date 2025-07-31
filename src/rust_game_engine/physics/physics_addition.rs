@@ -12,11 +12,31 @@ pub enum PhysicsAddition {
         accel: Vector2,
         vel: Vector2,
         mass: f32,
+        inv_mass: f32,
     },
     Static,
 }
 
 impl PhysicsAddition {
+    pub fn get_masses(&self) -> (f32, f32) {
+        if let PhysicsAddition::Dynamic { mass, inv_mass, .. } = self {
+            (*mass, *inv_mass)
+        } else {
+            (f32::INFINITY, 0.)
+        }
+    }
+
+    pub fn get_vel_mut(&mut self) -> Option<&mut Vector2> {
+        if let PhysicsAddition::Dynamic { ref mut vel, .. } = self {
+            Some(vel)
+        } else {
+            None
+        }
+    }
+
+    pub fn is_dynamic(&self) -> bool {
+        matches!(self, PhysicsAddition::Dynamic { .. })
+    }
     pub fn is_static(&self) -> bool {
         matches!(self, PhysicsAddition::Static)
     }
@@ -68,7 +88,7 @@ impl Polygon {
         let mut min_y: f32 = f32::INFINITY;
         let mut max_y: f32 = f32::NEG_INFINITY;
 
-        for &Vector2{x, y} in &self.corners {
+        for &Vector2 { x, y } in &self.corners {
             min_x = min_x.min(x);
             max_x = max_x.max(x);
             min_y = min_y.min(y);
